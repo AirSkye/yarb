@@ -9,7 +9,7 @@ from email.header import Header
 from email.mime.text import MIMEText
 from pathlib import Path
 from datetime import datetime
-from pyrate_limiter import Duration, Rate, InMemoryBucket, Limiter
+from pyrate_limiter import Duration, Rate, Limiter
 
 from utils import *
 
@@ -82,9 +82,7 @@ class wecomBot:
         return text_list
 
     async def send(self, text_list: list):
-        rates = [Rate(20, Duration.MINUTE)] # 频率限制，20条/分钟
-        bucket = InMemoryBucket(rates)
-        limiter = Limiter(bucket, max_delay=Duration.MINUTE.value)
+        limiter = Limiter([Rate(20, Duration.MINUTE)])  # 频率限制，20条/分钟
 
         for text in text_list:
             limiter.try_acquire('identity')
@@ -123,9 +121,7 @@ class dingtalkBot:
         return text_list
 
     async def send(self, text_list: list):
-        rates = [Rate(20, Duration.MINUTE)] # 频率限制，20条/分钟
-        bucket = InMemoryBucket(rates)
-        limiter = Limiter(bucket, max_delay=Duration.MINUTE.value)
+        limiter = Limiter([Rate(20, Duration.MINUTE)])  # 频率限制，20条/分钟
 
         for (feed, text) in text_list:
             limiter.try_acquire('identity')
@@ -170,9 +166,7 @@ class qqBot:
         return text_list
 
     async def send(self, text_list: list):
-        rates = [Rate(20, Duration.MINUTE)] # 频率限制，20条/分钟
-        bucket = InMemoryBucket(rates)
-        limiter = Limiter(bucket, max_delay=Duration.MINUTE.value)
+        limiter = Limiter([Rate(20, Duration.MINUTE)])  # 频率限制，20条/分钟
 
         for text in text_list:
             limiter.try_acquire('identity')
@@ -310,9 +304,7 @@ class telegramBot:
         return text_list
 
     async def send(self, text_list: list):
-        rates = [Rate(20, Duration.MINUTE)] # 频率限制，20条/分钟
-        bucket = InMemoryBucket(rates)
-        limiter = Limiter(bucket, max_delay=Duration.MINUTE.value)
+        limiter = Limiter([Rate(20, Duration.MINUTE)])  # 频率限制，20条/分钟
 
         for text in text_list:
             limiter.try_acquire('identity')

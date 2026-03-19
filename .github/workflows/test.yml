@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Debug secrets
+        env:
+          WECOM_KEY: ${{ secrets.WECOM_KEY }}
         run: echo "WECOM_KEY length is $(echo -n '${{ secrets.WECOM_KEY }}' | wc -c)"
 
   del_runs:

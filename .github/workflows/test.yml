@@ -1,0 +1,27 @@
+
+
+name: testkey
+
+# 国际标准时间2点（北京时间10点）
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug secrets
+        run: echo "WECOM_KEY length is $(echo -n '${{ secrets.WECOM_KEY }}' | wc -c)"
+
+  del_runs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 7
+          keep_minimum_runs: 7

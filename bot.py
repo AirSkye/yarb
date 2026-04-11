@@ -1,6 +1,7 @@
 import time
 import json
 import yaml
+import hashlib
 import telegram
 import requests
 import smtplib
@@ -15,6 +16,86 @@ from utils import *
 
 __all__ = ["feishuBot", "wecomBot", "dingtalkBot", "qqBot", "telegramBot", "mailBot"]
 today = datetime.now().strftime("%Y-%m-%d")
+
+
+class BaseTranslator:
+    """百度翻译基类"""
+    
+    def __init__(self, appid, key, from_lang='en', to_lang='zh'):
+        self.appid = appid
+        self.key = key
+        self.from_lang = from_lang
+        self.to_lang = to_lang
+        self.api_url = 'https://fanyi-api.baidu.com/api/trans/vip/translate'
+    
+    def translate_batch(self, texts: list) -> dict:
+        """批量翻译文本，返回 {原文：译文} 字典"""
+        if not texts:
+            return {}
+        
+        # 过滤掉空文本和纯中文文本
+        texts_to_translate = []
+        import re
+        for text in texts:
+            if not text:
+                continue
+            has_english = bool(re.search(r'[a-zA-Z]', text))
+            has_chinese = bool(re.search(r'[\u4e00-\u9fff]', text))
+            # 只翻译包含英文且不包含中文的文本
+            if has_english and not has_chinese:
+                texts_to_translate.append(text)
+        
+        if not texts_to_translate:
+            return {}
+        
+        # 用换行符连接所有文本（百度翻译支持批量翻译）
+        joined_text = '\n'.join(texts_to_translate)
+        
+        # 生成随机盐
+        salt = str(hashlib.md5(str(time.time()).encode()).hexdigest()[:10])
+        
+        # 生成签名
+        sign_str = self.appid + joined_text + salt + self.key
+        sign = hashlib.md5(sign_str.encode('utf-8')).hexdigest()
+        
+        # 拼接请求参数
+        params = {
+            'q': joined_text,
+            'from': self.from_lang,
+            'to': self.to_lang,
+            'appid': self.appid,
+            'salt': salt,
+            'sign': sign
+        }
+        
+        try:
+            response = requests.get(self.api_url, params=params, timeout=10)
+            result = response.json()
+            
+            if 'trans_result' in result:
+                # 返回翻译结果字典
+                translations = {}
+                for item in result['trans_result']:
+                    src = item['src']
+                    dst = item['dst']
+                    translations[src] = dst
+                return translations
+            elif 'error_code' in result:
+                print(f'[-] 批量翻译失败：{result["error_msg"]} (code: {result["error_code"]})')
+                return {}
+            else:
+                return {}
+        except Exception as e:
+            print(f'[-] 批量翻译请求异常：{e}')
+            return {}
+    
+    def translate(self, text):
+        """翻译单个文本（兼容旧接口）"""
+        if not text:
+            return text
+        
+        result = self.translate_batch([text])
+        return result.get(text, text)
 
 
 class feishuBot:
@@ -65,11 +146,12 @@ class wecomBot:
     https://developer.work.weixin.qq.com/document/path/91770
     """
 
-    def __init__(self, key, proxy_url='') -> None:
+    def __init__(self, key, proxy_url='', translator=None) -> None:
         self.key = key
         self.proxy = {'http': proxy_url, 'https': proxy_url} if proxy_url else {
             'http': None, 'https': None}
         self.max_bytes = 4096  # 企业微信 markdown 消息最大字节数
+        self.translator = translator  # 翻译器实例
 
     @staticmethod
     def parse_results(results: list):
@@ -81,8 +163,21 @@ class wecomBot:
             text_list.append((feed, items))
         return text_list
 
-    def _split_messages(self, text_list: list) -> list:
+    def _collect_english_titles(self, text_list: list) -> list:
+        """收集所有需要翻译的英文标题"""
+        import re
+        titles = []
+        for feed, items in text_list:
+            for title, link in items:
+                has_english = bool(re.search(r'[a-zA-Z]', title))
+                has_chinese = bool(re.search(r'[\u4e00-\u9fff]', title))
+                if has_english and not has_chinese:
+                    titles.append(title)
+        return titles
+
+    def _split_messages(self, text_list: list, translations: dict = None) -> list:
         """根据 4096 字节限制分割消息内容"""
+        translations = translations or {}
         messages = []
         current_text = ""
         
@@ -91,7 +186,13 @@ class wecomBot:
             feed_header = f'## {feed}\n'
             
             for title, link in items:
-                item_text = f'- [{title}]({link})\n'
+                # 使用翻译后的标题（如果有）
+                translated_title = translations.get(title, title)
+                # 如果翻译了，显示原文和译文（使用括号包裹译文，避免 markdown 链接换行问题）
+                if translated_title != title:
+                    item_text = f'- [{title} ({translated_title})]({link})\n'
+                else:
+                    item_text = f'- [{translated_title}]({link})\n'
                 
                 # 计算当前内容加上新的 item 后的字节长度
                 test_text = current_text + feed_header + item_text
@@ -138,8 +239,18 @@ class wecomBot:
     async def send(self, text_list: list):
         limiter = Limiter([Rate(20, Duration.MINUTE)])  # 频率限制，20条/分钟
 
-        # 根据字节限制分割消息
-        messages = self._split_messages(text_list)
+        # 先收集所有英文标题并批量翻译
+        translations = {}
+        if self.translator:
+            english_titles = self._collect_english_titles(text_list)
+            if english_titles:
+                console.print(f'[+] 正在批量翻译 {len(english_titles)} 个英文标题...', style='bold yellow')
+                translations = self.translator.translate_batch(english_titles)
+                if translations:
+                    console.print(f'[+] 翻译完成：{len(translations)} 个标题', style='bold green')
+        
+        # 根据字节限制分割消息（使用翻译结果）
+        messages = self._split_messages(text_list, translations)
         
         for text in messages:
             limiter.try_acquire('identity')

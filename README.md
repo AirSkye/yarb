@@ -57,6 +57,13 @@ $ nohup ./yarb.py --cron 11:00 > run.log 2>&1 &
 - [QQ群机器人](https://github.com/Mrs4s/go-cqhttp)：`QQ_KEY`（需要关闭登录设备锁）
 - [Telegram机器人](https://core.telegram.org/bots/api): `TELEGRAM_KEY`（需要代理）
 
+翻译功能配置（百度翻译 API）：
+
+- `BAIDU_TRANSLATE_APPID`：百度翻译 APP ID
+- `BAIDU_TRANSLATE_KEY`：百度翻译密钥
+
+启用翻译功能后，企业微信机器人在推送时会自动将英文标题翻译成中文。
+
 ## 订阅源
 
 推荐订阅源：

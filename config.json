@@ -83,6 +83,14 @@
         }
     },
 
+    "translate": {
+        "enabled": false,
+        "secrets_appid": "BAIDU_TRANSLATE_APPID",
+        "secrets_key": "BAIDU_TRANSLATE_KEY",
+        "from": "en",
+        "to": "zh"
+    },
+
     "keywords": {
         "exclude": [
             "招聘", "招生", "开班", "报名", "双非", "倒计时", "圆满", "抽奖",

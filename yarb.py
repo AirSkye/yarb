@@ -108,9 +108,25 @@ def parseThread(conf: dict, url: str, proxy_url=''):
     return title, result
 
 
-async def init_bot(conf: dict, proxy_url=''):
+async def init_bot(conf: dict, proxy_url='', translate_conf=None):
     """初始化机器人"""
     bots = []
+    
+    # 初始化翻译器
+    translator = None
+    if translate_conf and translate_conf.get('enabled'):
+        from bot import BaseTranslator
+        appid = os.getenv(translate_conf.get('secrets_appid', ''))
+        key = os.getenv(translate_conf.get('secrets_key', ''))
+        from_lang = translate_conf.get('from', 'en')
+        to_lang = translate_conf.get('to', 'zh')
+        
+        if appid and key:
+            translator = BaseTranslator(appid, key, from_lang, to_lang)
+            console.print('[+] 翻译器初始化成功', style='bold green')
+        else:
+            console.print('[-] 翻译器配置不完整，请设置环境变量 BAIDU_TRANSLATE_APPID 和 BAIDU_TRANSLATE_KEY', style='bold yellow')
+    
     for name, v in conf.items():
         if v['enabled']:
             key = os.getenv(v['secrets']) or v['key']
@@ -127,6 +143,10 @@ async def init_bot(conf: dict, proxy_url=''):
                 bot = globals()[f'{name}Bot'](key, v['chat_id'], proxy_url)
                 if await bot.test_connect():
                     bots.append(bot)
+            elif name == 'wecom':
+                # 企业微信机器人支持翻译
+                bot = globals()[f'{name}Bot'](key, proxy_url, translator=translator)
+                bots.append(bot)
             else:
                 bot = globals()[f'{name}Bot'](key, proxy_url)
                 bots.append(bot)
@@ -213,7 +233,8 @@ async def job(args):
 
     # 推送文章
     proxy_bot = conf['proxy']['url'] if conf['proxy']['bot'] else ''
-    bots = await init_bot(conf['bot'], proxy_bot)
+    translate_conf = conf.get('translate', {})
+    bots = await init_bot(conf['bot'], proxy_bot, translate_conf)
     for bot in bots:
         await bot.send(bot.parse_results(results))
 

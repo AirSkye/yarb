@@ -69,24 +69,81 @@ class wecomBot:
         self.key = key
         self.proxy = {'http': proxy_url, 'https': proxy_url} if proxy_url else {
             'http': None, 'https': None}
+        self.max_bytes = 4096  # 企业微信 markdown 消息最大字节数
 
     @staticmethod
     def parse_results(results: list):
+        """将所有 RSS 内容合并为一个列表，每个元素为 (feed, items) 元组"""
         text_list = []
         for result in results:
             (feed, value), = result.items()
-            text = f'## {feed}\n'
-            for title, link in value.items():
-                text += f'- [{title}]({link})\n'
-            text_list.append(text.strip())
+            items = [(title, link) for title, link in value.items()]
+            text_list.append((feed, items))
         return text_list
+
+    def _split_messages(self, text_list: list) -> list:
+        """根据 4096 字节限制分割消息内容"""
+        messages = []
+        current_text = ""
+        
+        for feed, items in text_list:
+            # 添加 feed 标题
+            feed_header = f'## {feed}\n'
+            
+            for title, link in items:
+                item_text = f'- [{title}]({link})\n'
+                
+                # 计算当前内容加上新的 item 后的字节长度
+                test_text = current_text + feed_header + item_text
+                byte_length = len(test_text.encode('utf-8'))
+                
+                # 如果加上新 item 后超过限制
+                if byte_length > self.max_bytes:
+                    # 如果当前已有内容，先发送当前内容
+                    if current_text.strip():
+                        messages.append(current_text.strip())
+                        current_text = feed_header + item_text
+                    else:
+                        # 如果当前为空但单个 item 就超限，则截断
+                        test_with_header = feed_header + item_text
+                        if len(test_with_header.encode('utf-8')) > self.max_bytes:
+                            # 截断到限制内
+                            truncated = self._truncate_to_limit(feed_header + item_text, self.max_bytes)
+                            messages.append(truncated.strip())
+                            current_text = ""
+                        else:
+                            current_text = test_with_header
+                else:
+                    # 如果当前内容为空，先添加 feed 标题
+                    if not current_text:
+                        current_text = feed_header + item_text
+                    else:
+                        current_text += item_text
+        
+        # 添加最后剩余的内容
+        if current_text.strip():
+            messages.append(current_text.strip())
+        
+        return messages
+
+    def _truncate_to_limit(self, text: str, max_bytes: int) -> str:
+        """将文本截断到指定字节限制内"""
+        encoded = text.encode('utf-8')
+        if len(encoded) <= max_bytes:
+            return text
+        # 截断并尝试在字符边界处切割
+        truncated = encoded[:max_bytes].decode('utf-8', errors='ignore')
+        return truncated
 
     async def send(self, text_list: list):
         limiter = Limiter([Rate(20, Duration.MINUTE)])  # 频率限制，20条/分钟
 
-        for text in text_list:
+        # 根据字节限制分割消息
+        messages = self._split_messages(text_list)
+        
+        for text in messages:
             limiter.try_acquire('identity')
-            print(f'{len(text)} {text[:50]}...{text[-50:]}')
+            print(f'{len(text.encode("utf-8"))} {text[:50]}...{text[-50:]}')
 
             data = {"msgtype": "markdown", "markdown": {"content": text}}
             headers = {'Content-Type': 'application/json'}
@@ -98,6 +155,8 @@ class wecomBot:
             else:
                 console.print('[-] wecomBot 发送失败', style='bold red')
                 print(r.text)
+
+
 
 
 class dingtalkBot:

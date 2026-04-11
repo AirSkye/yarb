@@ -84,7 +84,7 @@
     },
 
     "translate": {
-        "enabled": false,
+        "enabled": true,
         "secrets_appid": "BAIDU_TRANSLATE_APPID",
         "secrets_key": "BAIDU_TRANSLATE_KEY",
         "from": "en",

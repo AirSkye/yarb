@@ -24,6 +24,8 @@ jobs:
         env:
           FEISHU_KEY: ${{ secrets.FEISHU_KEY }}
           WECOM_KEY: ${{ secrets.WECOM_KEY }}
+          SECRETS_APPID: ${{ secrets.SECRETS_APPID }}
+          SECRETS_KEY: ${{ secrets.SECRETS_KEY }}
           DINGTALK_KEY: ${{ secrets.DINGTALK_KEY }}
           QQ_KEY: ${{ secrets.QQ_KEY }}
           TELEGRAM_KEY: ${{ secrets.TELEGRAM_KEY }}
